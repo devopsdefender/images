@@ -1,0 +1,94 @@
+name: Baremetal Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_image_url:
+        description: "Ubuntu cloud image URL"
+        required: false
+        default: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+        type: string
+
+jobs:
+  build:
+    runs-on: [self-hosted, baremetal-builder]
+    permissions:
+      contents: read
+    env:
+      SOURCE_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download latest dd-agent release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/dd-bins
+          gh release download latest --repo devopsdefender/agent \
+            --pattern 'dd-agent' --dir /tmp/dd-bins --clobber
+          chmod 0755 /tmp/dd-bins/dd-agent
+
+      - name: Download latest dd-cp release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release download latest --repo devopsdefender/control-plane \
+            --pattern 'dd-cp' --dir /tmp/dd-bins --clobber 2>/dev/null \
+          && chmod 0755 /tmp/dd-bins/dd-cp \
+          || echo "::warning::dd-cp release not found, baking image without dd-cp"
+
+      - name: Set up Packer
+        uses: hashicorp/setup-packer@v3
+
+      - name: Initialize Packer
+        working-directory: packer
+        run: packer init baremetal-agent-image.pkr.hcl
+
+      - name: Generate SSH keypair for Packer
+        run: ssh-keygen -t ed25519 -f /tmp/packer-ssh-key -N "" -q
+
+      - name: Prepare cloud-init templates
+        run: |
+          set -euo pipefail
+          SSH_PUB_KEY="$(cat /tmp/packer-ssh-key.pub)"
+          sed -e "s|__SSH_USERNAME__|packer|g" \
+              -e "s|__SSH_PUB_KEY__|${SSH_PUB_KEY}|g" \
+              packer/templates/baremetal-user-data.tmpl > /tmp/user-data
+          sed -e "s|__VM_NAME__|dd-packer-build|g" \
+              packer/templates/baremetal-meta-data.tmpl > /tmp/meta-data
+
+      - name: Build baremetal image
+        working-directory: packer
+        run: |
+          set -euo pipefail
+          sha12="$(echo "${SOURCE_SHA}" | cut -c1-12)"
+
+          PACKER_ARGS=(
+            -var "agent_binary_path=/tmp/dd-bins/dd-agent"
+            -var "ssh_private_key_file=/tmp/packer-ssh-key"
+            -var "cloud_init_user_data_path=/tmp/user-data"
+            -var "cloud_init_meta_data_path=/tmp/meta-data"
+            -var "vm_name=dd-baremetal-${sha12}"
+            -var "output_directory=${GITHUB_WORKSPACE}/output-baremetal"
+            -var "base_image_url=${{ inputs.base_image_url }}"
+          )
+
+          if [ -f /tmp/dd-bins/dd-cp ]; then
+            PACKER_ARGS+=(-var "cp_binary_path=/tmp/dd-bins/dd-cp")
+          fi
+
+          packer build "${PACKER_ARGS[@]}" baremetal-agent-image.pkr.hcl
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: baremetal-image-${{ github.run_id }}
+          path: output-baremetal/
+          if-no-files-found: warn
+
+      - name: Cleanup
+        if: always()
+        run: rm -f /tmp/packer-ssh-key /tmp/packer-ssh-key.pub
