@@ -98,9 +98,8 @@ build {
   }
 
   provisioner "file" {
-    source      = var.cp_binary_path
+    source      = var.cp_binary_path != "" ? var.cp_binary_path : "/dev/null"
     destination = "/tmp/dd-cp"
-    only        = [for s in ["dd-gcp-agent.googlecompute.agent"] : s if var.cp_binary_path != ""]
   }
 
   provisioner "shell" {
