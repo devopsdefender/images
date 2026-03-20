@@ -100,7 +100,7 @@ build {
   provisioner "file" {
     source      = var.cp_binary_path
     destination = "/tmp/dd-cp"
-    only        = [for s in ["source.googlecompute.agent"] : s if var.cp_binary_path != ""]
+    only        = [for s in ["dd-gcp-agent.googlecompute.agent"] : s if var.cp_binary_path != ""]
   }
 
   provisioner "shell" {
