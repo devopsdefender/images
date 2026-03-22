@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       base_image_url:
-        description: "Ubuntu cloud image URL"
+        description: "Ubuntu minimal cloud image URL"
         required: false
-        default: "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+        default: "https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img"
         type: string
 
 jobs:

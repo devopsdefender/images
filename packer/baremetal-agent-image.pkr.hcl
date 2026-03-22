@@ -9,7 +9,7 @@ packer {
 
 variable "base_image_url" {
   type    = string
-  default = "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+  default = "https://cloud-images.ubuntu.com/minimal/releases/noble/release/ubuntu-24.04-minimal-cloudimg-amd64.img"
 }
 
 variable "base_image_checksum" {
@@ -34,7 +34,7 @@ variable "accelerator" {
 
 variable "disk_size" {
   type    = string
-  default = "20G"
+  default = "8G"
 }
 
 variable "cpus" {
@@ -119,7 +119,7 @@ build {
   }
 
   provisioner "shell" {
-    script          = "${path.root}/provision-agent-image.sh"
+    script          = "${path.root}/provision-baremetal-image.sh"
     execute_command = "chmod +x {{ .Path }}; {{ .Vars }} sudo -E bash -euxo pipefail {{ .Path }}"
   }
 }
